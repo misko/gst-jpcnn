@@ -118,6 +118,7 @@ static GstFlowReturn gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffe
 static void
 gst_jpcnn_class_init (GstjpcnnClass * klass)
 {
+  fprintf(stderr,"JPCNN : gst_jpcnn_class_init\n");
   GObjectClass *gobject_class;
   GstElementClass *gstelement_class;
 
@@ -158,6 +159,7 @@ gst_jpcnn_class_init (GstjpcnnClass * klass)
 static void
 gst_jpcnn_init (Gstjpcnn * filter)
 {
+  fprintf(stderr,"JPCNN : gst_jpcnn_init\n");
   filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
   gst_pad_set_event_function (filter->sinkpad,
                               GST_DEBUG_FUNCPTR(gst_jpcnn_sink_event));
@@ -211,6 +213,7 @@ static void
 gst_jpcnn_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
+  fprintf(stderr,"JPCNN : gst_jpcnn_get_property\n");
   Gstjpcnn *filter = GST_JPCNN (object);
 
   switch (prop_id) {
@@ -235,6 +238,7 @@ gst_jpcnn_get_property (GObject * object, guint prop_id,
 static gboolean
 gst_jpcnn_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 {
+  fprintf(stderr,"JPCNN : gst_jpcnn_sink_event\n");
   gboolean ret;
   Gstjpcnn *filter;
 
@@ -246,8 +250,15 @@ gst_jpcnn_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
       GstCaps * caps;
       gint width, height; 
       gst_event_parse_caps (event, &caps);
-	GstStructure *structure;
-      structure = gst_caps_get_structure (caps, 0);
+	if (caps==NULL) {
+		fprintf(stderr,"Failed to get caps in JPCNN SINK _EVEN\n");
+		exit(1);
+	}
+	GstStructure *structure =  gst_caps_get_structure (caps, 0);
+	if (structure==NULL) {
+		fprintf(stderr,"failed to get structure in JPCNN sink_event\n");
+		exit(1);
+	}
       gst_structure_get_int (structure, "width", &width);
       gst_structure_get_int (structure, "height", &height);
       filter->width=width;
@@ -279,7 +290,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   GstMapInfo in_map;
   gst_buffer_map (buf, &in_map, GST_MAP_READ);
 
-  if (filter->silent == FALSE)
+  if (filter->silent == FALSE) {
         if (in_map.size<=0) {
                 // TODO: needed?
                 GST_WARNING("Received empty buffer");
@@ -288,6 +299,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
                 //GST_BUFFER_TIMESTAMP(outbuf) = GST_BUFFER_TIMESTAMP(buf);
                 return gst_pad_push (filter->srcpad, buf);
         }
+  }
 
  if (filter->networkaHandle!=NULL && filter->networkbHandle!=NULL) {
 	//fprintf(stderr,"FILTER %d x %d\n",filter->width, filter->height);

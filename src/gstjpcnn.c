@@ -80,6 +80,7 @@ enum
 enum
 {
   PROP_0,
+  PROP_ACTIVE,
   PROP_SILENT,
   PROP_NETWORKA,
   PROP_NETWORKB
@@ -131,6 +132,9 @@ gst_jpcnn_class_init (GstjpcnnClass * klass)
   g_object_class_install_property (gobject_class, PROP_SILENT,
       g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
           FALSE, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_ACTIVE,
+      g_param_spec_boolean ("active", "active", "Run predictions ?",
+          FALSE, G_PARAM_READWRITE));
 
   gst_element_class_set_details_simple(gstelement_class,
     "jpcnn",
@@ -172,6 +176,7 @@ gst_jpcnn_init (Gstjpcnn * filter)
   GST_PAD_SET_PROXY_CAPS (filter->srcpad);
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
+  filter->active = FALSE;
   filter->silent = FALSE;
   filter->networkaHandle=NULL;
   filter->networkbHandle=NULL;
@@ -188,6 +193,9 @@ gst_jpcnn_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_SILENT:
       filter->silent = g_value_get_boolean (value);
+      break;
+    case PROP_ACTIVE:
+      filter->active = g_value_get_boolean(value);
       break;
     case PROP_NETWORKA: 
       filter->networka_fn = strdup(g_value_get_string (value));
@@ -219,6 +227,9 @@ gst_jpcnn_get_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_SILENT:
       g_value_set_boolean (value, filter->silent);
+      break;
+    case PROP_ACTIVE:
+      g_value_set_boolean (value, filter->active);
       break;
     case PROP_NETWORKA:
       g_value_set_string (value, filter->networka_fn);
@@ -277,6 +288,18 @@ gst_jpcnn_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
   return ret;
 }
 
+float xor_float(float f, char key) {
+        float xord = f;
+        char * x = (char*)(&xord);
+        int i;
+        for (i=0; i<sizeof(float); i++ ){
+                *x^=key;
+                x++;
+        }
+        return xord;
+}
+
+
 /* chain function
  * this function does the actual processing
  */
@@ -284,8 +307,13 @@ static GstFlowReturn
 gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 {
   Gstjpcnn *filter;
-
+  //fprintf(stderr,"JPCNN PUNTING!\n");
   filter = GST_JPCNN (parent);
+  if (filter->active==FALSE) {
+    fprintf(stderr,"GSTJPCNN PUNT ON FRAME\n");
+    return gst_pad_push (filter->srcpad, buf);
+  }
+
 
   GstMapInfo in_map;
   gst_buffer_map (buf, &in_map, GST_MAP_READ);
@@ -309,7 +337,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   int predictionsLabelsLength;
       void * imageHandle = jpcnn_create_image_buffer_from_uint8_data(in_map.data, filter->width, filter->height, 3, (3 * filter->width), 0, 0);
       char * network_fn=NULL;
-      if (filter->detections++%2==0) {
+      if ((filter->detections++)%2==0) {
          jpcnn_classify_image(filter->networkaHandle, imageHandle, 0, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength);
 	 network_fn=filter->networka_fn;
       } else {
@@ -322,21 +350,22 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     float p[4]= {0,0,0,0};
     //G_TYPE_POINTER 
     //get probs for dog, cat, person, room
+    char chewbacca = 'x';
     for (m=0; m<predictionsLength; m++) {
 	char * label = predictionsLabels[m];
 	if (strcmp(label,"person")==0) {
-		p[0]=predictions[m];
+		p[0]=xor_float(predictions[m],chewbacca);
 	} else if (strcmp(label,"room")==0) {
-		p[1]=predictions[m];
+		p[1]=xor_float(predictions[m],chewbacca);
 	} else if (strcmp(label,"cat")==0) {
-		p[2]=predictions[m];
+		p[2]=xor_float(predictions[m],chewbacca);
         } else {
-		p[3]+=predictions[m];
+		p[3]+=xor_float(predictions[m],chewbacca);
         }
     }
           GstStructure *s = gst_structure_new ("jpcnn", "person",
-              G_TYPE_FLOAT, p[0], "room", G_TYPE_FLOAT,
-              p[1],"cat",G_TYPE_FLOAT,p[2],"dog",G_TYPE_FLOAT,p[3], NULL);
+              G_TYPE_FLOAT, xor_float(p[0],chewbacca), "room", G_TYPE_FLOAT,
+              xor_float(p[1],chewbacca),"cat",G_TYPE_FLOAT,xor_float(p[2],chewbacca),"dog",G_TYPE_FLOAT,xor_float(p[3],chewbacca), NULL);
           GstMessage * ms = gst_message_new_element (GST_OBJECT (filter), s);
           gboolean mr = gst_element_post_message (GST_ELEMENT (filter), ms);
 	if (!mr) {
@@ -344,7 +373,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
         }
     //free(predictions); //TODO THIS IS STILL AMEMORY LEAK IN JPCNN?
     //print the top 5 
-	/*
+	/*	
     for (m=0; m<5; m++ ){
       double max = -1;
       int max_i = -1;
@@ -358,7 +387,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	continue;
       }
       predictions[max_i]=-1;
-      fprintf(stdout,"%s%s", predictionsLabels[max_i],m==5-1 ? "\n" : "\t");
+      fprintf(stdout,"%d %s %s%s", k,network_fn, predictionsLabels[max_i],m==5-1 ? "\n" : "\t");
     }*/
   /* just push out the incoming buffer without touching it */
   }

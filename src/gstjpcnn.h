@@ -78,6 +78,7 @@ struct _Gstjpcnn
   int height;
   unsigned int detections;
   gboolean silent;
+  gboolean active;
 };
 
 struct _GstjpcnnClass 

@@ -77,6 +77,7 @@ struct _Gstjpcnn
   int width;
   int height;
   unsigned int detections;
+  gboolean toggle;
   gboolean silent;
   gboolean active;
 };

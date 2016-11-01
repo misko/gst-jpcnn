@@ -81,6 +81,7 @@ enum
 {
   PROP_0,
   PROP_ACTIVE,
+  PROP_TOGGLE,
   PROP_SILENT,
   PROP_NETWORKA,
   PROP_NETWORKB
@@ -135,6 +136,9 @@ gst_jpcnn_class_init (GstjpcnnClass * klass)
   g_object_class_install_property (gobject_class, PROP_ACTIVE,
       g_param_spec_boolean ("active", "active", "Run predictions ?",
           FALSE, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_TOGGLE,
+      g_param_spec_boolean ("toggle", "toggle", "TOGGLE A FRAME",
+          FALSE, G_PARAM_READWRITE));
 
   gst_element_class_set_details_simple(gstelement_class,
     "jpcnn",
@@ -176,6 +180,7 @@ gst_jpcnn_init (Gstjpcnn * filter)
   GST_PAD_SET_PROXY_CAPS (filter->srcpad);
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
 
+  filter->toggle = FALSE;
   filter->active = FALSE;
   filter->silent = FALSE;
   filter->networkaHandle=NULL;
@@ -196,6 +201,9 @@ gst_jpcnn_set_property (GObject * object, guint prop_id,
       break;
     case PROP_ACTIVE:
       filter->active = g_value_get_boolean(value);
+      break;
+    case PROP_TOGGLE:
+      filter->toggle = g_value_get_boolean(value);
       break;
     case PROP_NETWORKA: 
       filter->networka_fn = strdup(g_value_get_string (value));
@@ -230,6 +238,9 @@ gst_jpcnn_get_property (GObject * object, guint prop_id,
       break;
     case PROP_ACTIVE:
       g_value_set_boolean (value, filter->active);
+      break;
+    case PROP_TOGGLE:
+      g_value_set_boolean (value, filter->toggle);
       break;
     case PROP_NETWORKA:
       g_value_set_string (value, filter->networka_fn);
@@ -309,7 +320,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   Gstjpcnn *filter;
   //fprintf(stderr,"JPCNN PUNTING!\n");
   filter = GST_JPCNN (parent);
-  if (filter->active==FALSE) {
+  if (filter->active==FALSE || filter->toggle==FALSE) {
     fprintf(stderr,"GSTJPCNN PUNT ON FRAME\n");
     return gst_pad_push (filter->srcpad, buf);
   }

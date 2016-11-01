@@ -321,10 +321,10 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   //fprintf(stderr,"JPCNN PUNTING!\n");
   filter = GST_JPCNN (parent);
   if (filter->active==FALSE || filter->toggle==FALSE) {
-    fprintf(stderr,"GSTJPCNN PUNT ON FRAME %s %s\n", filter->active==FALSE ? "FALSE" : "TRUE" , filter->toggle==FALSE ? "FALSE" : "TRUE");
+    //fprintf(stderr,"GSTJPCNN PUNT ON FRAME %s %s\n", filter->active==FALSE ? "FALSE" : "TRUE" , filter->toggle==FALSE ? "FALSE" : "TRUE");
     return gst_pad_push (filter->srcpad, buf);
   }
-  fprintf(stderr,"GSTJPCNN PROCESSSS FRAME!!\n");
+  //fprintf(stderr,"GSTJPCNN PROCESSSS FRAME!!\n");
   filter->toggle=FALSE; // reset the toggle
 
 

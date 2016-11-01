@@ -324,6 +324,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     fprintf(stderr,"GSTJPCNN PUNT ON FRAME\n");
     return gst_pad_push (filter->srcpad, buf);
   }
+  filter->toggle=FALSE; // reset the toggle
 
 
   GstMapInfo in_map;

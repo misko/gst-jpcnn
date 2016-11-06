@@ -82,6 +82,7 @@ enum
   PROP_0,
   PROP_ACTIVE,
   PROP_TOGGLE,
+  PROP_RANDOM,
   PROP_SILENT,
   PROP_NETWORKA,
   PROP_NETWORKB
@@ -139,6 +140,9 @@ gst_jpcnn_class_init (GstjpcnnClass * klass)
   g_object_class_install_property (gobject_class, PROP_TOGGLE,
       g_param_spec_boolean ("toggle", "toggle", "TOGGLE A FRAME",
           FALSE, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_RANDOM,
+      g_param_spec_boolean ("random", "random", "RANDOM SAMPLE",
+          TRUE, G_PARAM_READWRITE));
 
   gst_element_class_set_details_simple(gstelement_class,
     "jpcnn",
@@ -202,6 +206,9 @@ gst_jpcnn_set_property (GObject * object, guint prop_id,
     case PROP_ACTIVE:
       filter->active = g_value_get_boolean(value);
       break;
+    case PROP_RANDOM:
+      filter->random = g_value_get_boolean(value);
+      break;
     case PROP_TOGGLE:
       filter->toggle = g_value_get_boolean(value);
       break;
@@ -238,6 +245,9 @@ gst_jpcnn_get_property (GObject * object, guint prop_id,
       break;
     case PROP_ACTIVE:
       g_value_set_boolean (value, filter->active);
+      break;
+    case PROP_RANDOM:
+      g_value_set_boolean (value, filter->random);
       break;
     case PROP_TOGGLE:
       g_value_set_boolean (value, filter->toggle);
@@ -342,67 +352,68 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
         }
   }
 
- if (filter->networkaHandle!=NULL && filter->networkbHandle!=NULL) {
-	//fprintf(stderr,"FILTER %d x %d\n",filter->width, filter->height);
-  float* predictions;
-  int predictionsLength;
-  char** predictionsLabels;
-  int predictionsLabelsLength;
-      void * imageHandle = jpcnn_create_image_buffer_from_uint8_data(in_map.data, filter->width, filter->height, 3, (3 * filter->width), 0, 0);
-      char * network_fn=NULL;
-      if ((filter->detections++)%2==0) {
-         jpcnn_classify_image(filter->networkaHandle, imageHandle, 0, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength);
-	 network_fn=filter->networka_fn;
-      } else {
-         jpcnn_classify_image(filter->networkbHandle, imageHandle, 0, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength);
-	 network_fn=filter->networkb_fn;
-      }
-      jpcnn_destroy_image_buffer(imageHandle);
+  if (filter->networkaHandle!=NULL && filter->networkbHandle!=NULL) {
+	  //fprintf(stderr,"FILTER %d x %d\n",filter->width, filter->height);
+	  float* predictions;
+	  int predictionsLength;
+	  char** predictionsLabels;
+	  int predictionsLabelsLength;
+	  void * imageHandle = jpcnn_create_image_buffer_from_uint8_data(in_map.data, filter->width, filter->height, 3, (3 * filter->width), 0, 0);
+	  char * network_fn=NULL;
+	  int flags = (filter->random==TRUE ? JPCNN_RANDOM_SAMPLE : 0);
+	  if ((filter->detections++)%2==0) {
+		  jpcnn_classify_image(filter->networkaHandle, imageHandle, flags, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength);
+		  network_fn=filter->networka_fn;
+	  } else {
+		  jpcnn_classify_image(filter->networkbHandle, imageHandle, flags, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength);
+		  network_fn=filter->networkb_fn;
+	  }
+	  jpcnn_destroy_image_buffer(imageHandle);
 
-    int m;
-    float p[4]= {0,0,0,0};
-    //G_TYPE_POINTER 
-    //get probs for dog, cat, person, room
-    char chewbacca = 'x';
-    for (m=0; m<predictionsLength; m++) {
-	char * label = predictionsLabels[m];
-	if (strcmp(label,"person")==0) {
-		p[0]=xor_float(predictions[m],chewbacca);
-	} else if (strcmp(label,"room")==0) {
-		p[1]=xor_float(predictions[m],chewbacca);
-	} else if (strcmp(label,"cat")==0) {
-		p[2]=xor_float(predictions[m],chewbacca);
-        } else {
-		p[3]+=xor_float(predictions[m],chewbacca);
-        }
-    }
-          GstStructure *s = gst_structure_new ("jpcnn", "person",
-              G_TYPE_FLOAT, xor_float(p[0],chewbacca), "room", G_TYPE_FLOAT,
-              xor_float(p[1],chewbacca),"cat",G_TYPE_FLOAT,xor_float(p[2],chewbacca),"dog",G_TYPE_FLOAT,xor_float(p[3],chewbacca), NULL);
-          GstMessage * ms = gst_message_new_element (GST_OBJECT (filter), s);
-          gboolean mr = gst_element_post_message (GST_ELEMENT (filter), ms);
-	if (!mr) {
-		g_print("Failed to send message!\n");
-        }
-    //free(predictions); //TODO THIS IS STILL AMEMORY LEAK IN JPCNN?
-    //print the top 5 
-	/*	
-    for (m=0; m<5; m++ ){
-      double max = -1;
-      int max_i = -1;
-      int i;
-      for (i=0; i<predictionsLength; i++) {
-        if (predictions[i]>max) {
-          max_i=i; max=predictions[i];
-        }
-      }
-      if (max_i==-1) {
-	continue;
-      }
-      predictions[max_i]=-1;
-      fprintf(stdout,"%d %s %s%s", k,network_fn, predictionsLabels[max_i],m==5-1 ? "\n" : "\t");
-    }*/
-  /* just push out the incoming buffer without touching it */
+	  int m;
+	  float p[4]= {0,0,0,0};
+	  //G_TYPE_POINTER 
+	  //get probs for dog, cat, person, room
+	  char chewbacca = 'x';
+	  for (m=0; m<predictionsLength; m++) {
+		  char * label = predictionsLabels[m];
+		  if (strcmp(label,"person")==0) {
+			  p[0]=xor_float(predictions[m],chewbacca);
+		  } else if (strcmp(label,"room")==0) {
+			  p[1]=xor_float(predictions[m],chewbacca);
+		  } else if (strcmp(label,"cat")==0) {
+			  p[2]=xor_float(predictions[m],chewbacca);
+		  } else {
+			  p[3]+=xor_float(predictions[m],chewbacca);
+		  }
+	  }
+	  GstStructure *s = gst_structure_new ("jpcnn", "person",
+			  G_TYPE_FLOAT, xor_float(p[0],chewbacca), "room", G_TYPE_FLOAT,
+			  xor_float(p[1],chewbacca),"cat",G_TYPE_FLOAT,xor_float(p[2],chewbacca),"dog",G_TYPE_FLOAT,xor_float(p[3],chewbacca), NULL);
+	  GstMessage * ms = gst_message_new_element (GST_OBJECT (filter), s);
+	  gboolean mr = gst_element_post_message (GST_ELEMENT (filter), ms);
+	  if (!mr) {
+		  g_print("Failed to send message!\n");
+	  }
+	  //free(predictions); //TODO THIS IS STILL AMEMORY LEAK IN JPCNN?
+	  //print the top 5 
+	  /*	
+		for (m=0; m<5; m++ ){
+		double max = -1;
+		int max_i = -1;
+		int i;
+		for (i=0; i<predictionsLength; i++) {
+		if (predictions[i]>max) {
+		max_i=i; max=predictions[i];
+		}
+		}
+		if (max_i==-1) {
+		continue;
+		}
+		predictions[max_i]=-1;
+		fprintf(stdout,"%d %s %s%s", k,network_fn, predictionsLabels[max_i],m==5-1 ? "\n" : "\t");
+		}*/
+	  /* just push out the incoming buffer without touching it */
   }
 
   /* just push out the incoming buffer without touching it */

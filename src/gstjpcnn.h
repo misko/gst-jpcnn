@@ -79,6 +79,7 @@ struct _Gstjpcnn
   unsigned int detections;
   gboolean toggle;
   gboolean silent;
+  gboolean random;
   gboolean active;
 };
 

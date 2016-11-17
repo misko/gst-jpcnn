@@ -330,13 +330,11 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   Gstjpcnn *filter;
   //fprintf(stderr,"JPCNN PUNTING!\n");
   filter = GST_JPCNN (parent);
-  if (filter->active==FALSE || filter->toggle==FALSE) {
-    //fprintf(stderr,"GSTJPCNN PUNT ON FRAME %s %s\n", filter->active==FALSE ? "FALSE" : "TRUE" , filter->toggle==FALSE ? "FALSE" : "TRUE");
-    return gst_pad_push (filter->srcpad, buf);
-  }
   //fprintf(stderr,"GSTJPCNN PROCESSSS FRAME!!\n");
   filter->toggle=FALSE; // reset the toggle
 
+
+  GstVideoCropMeta * meta = gst_buffer_get_video_crop_meta (buf);
 
   GstMapInfo in_map;
   gst_buffer_map (buf, &in_map, GST_MAP_READ);
@@ -359,14 +357,23 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	  char** predictionsLabels;
 	  int predictionsLabelsLength;
 	  void * imageHandle = jpcnn_create_image_buffer_from_uint8_data(in_map.data, filter->width, filter->height, 3, (3 * filter->width), 0, 0);
-	  char * network_fn=NULL;
-	  int flags = (filter->random==TRUE ? JPCNN_RANDOM_SAMPLE : 0);
+
+	
+	  //GstVideoCropMeta * meta = gst_buffer_get_video_crop_meta (buf);
+
+	  int flags = 0 ; //(filter->random==TRUE ? JPCNN_RANDOM_SAMPLE : 0);
+	  void * network_handle = NULL;
 	  if ((filter->detections++)%2==0) {
-		  jpcnn_classify_image(filter->networkaHandle, imageHandle, flags, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength);
-		  network_fn=filter->networka_fn;
+		  network_handle = filter->networkaHandle;
 	  } else {
-		  jpcnn_classify_image(filter->networkbHandle, imageHandle, flags, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength);
-		  network_fn=filter->networkb_fn;
+		  network_handle = filter->networkbHandle;
+	  }
+          int do_crop = 0;
+	  if (do_crop==1 && meta) {
+		  //lets crop!
+		  jpcnn_classify_image_wcrop(filter->networkaHandle, imageHandle, flags, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength,meta->x,meta->y,meta->width,meta->height);
+	  } else {
+		  jpcnn_classify_image(filter->networkaHandle, imageHandle, flags, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength);
 	  }
 	  jpcnn_destroy_image_buffer(imageHandle);
 
@@ -386,6 +393,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 		  } else {
 			  p[3]+=xor_float(predictions[m],chewbacca);
 		  }
+		  //fprintf(stdout,"%d %s %s %f\n", m,network_fn, predictionsLabels[m],xor_float(predictions[m],chewbacca));
 	  }
 	  GstStructure *s = gst_structure_new ("jpcnn", "person",
 			  G_TYPE_FLOAT, xor_float(p[0],chewbacca), "room", G_TYPE_FLOAT,
@@ -397,22 +405,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	  }
 	  //free(predictions); //TODO THIS IS STILL AMEMORY LEAK IN JPCNN?
 	  //print the top 5 
-	  /*	
-		for (m=0; m<5; m++ ){
-		double max = -1;
-		int max_i = -1;
-		int i;
-		for (i=0; i<predictionsLength; i++) {
-		if (predictions[i]>max) {
-		max_i=i; max=predictions[i];
-		}
-		}
-		if (max_i==-1) {
-		continue;
-		}
-		predictions[max_i]=-1;
-		fprintf(stdout,"%d %s %s%s", k,network_fn, predictionsLabels[max_i],m==5-1 ? "\n" : "\t");
-		}*/
+
 	  /* just push out the incoming buffer without touching it */
   }
 

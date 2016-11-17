@@ -372,9 +372,11 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	  } else {
 		  network_handle = filter->networkbHandle;
 	  }
-          int do_crop = 0;
-	  if (do_crop==1) {
+          //int do_crop = 0;
+	  //if (do_crop==1) {
+	  if ((filter->detections++)%3==1) {
 		  //lets crop!
+		  
 		  jpcnn_classify_image_wcrop(filter->networkaHandle, imageHandle, flags, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength,meta->x,meta->y,meta->width,meta->height);
 	  } else {
 		  jpcnn_classify_image(filter->networkaHandle, imageHandle, flags, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength);

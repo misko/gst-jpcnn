@@ -330,6 +330,10 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   Gstjpcnn *filter;
   //fprintf(stderr,"JPCNN PUNTING!\n");
   filter = GST_JPCNN (parent);
+  if (filter->active==FALSE) { // || filter->toggle==FALSE) {
+    //fprintf(stderr,"GSTJPCNN PUNT ON FRAME %s %s\n", filter->active==FALSE ? "FALSE" : "TRUE" , filter->toggle==FALSE ? "FALSE" : "TRUE");
+    return gst_pad_push (filter->srcpad, buf);
+  }
   //fprintf(stderr,"GSTJPCNN PROCESSSS FRAME!!\n");
   filter->toggle=FALSE; // reset the toggle
 
@@ -350,7 +354,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
         }
   }
 
-  if (filter->networkaHandle!=NULL && filter->networkbHandle!=NULL) {
+  if (meta && filter->networkaHandle!=NULL && filter->networkbHandle!=NULL) {
 	  //fprintf(stderr,"FILTER %d x %d\n",filter->width, filter->height);
 	  float* predictions;
 	  int predictionsLength;
@@ -369,7 +373,7 @@ gst_jpcnn_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 		  network_handle = filter->networkbHandle;
 	  }
           int do_crop = 0;
-	  if (do_crop==1 && meta) {
+	  if (do_crop==1) {
 		  //lets crop!
 		  jpcnn_classify_image_wcrop(filter->networkaHandle, imageHandle, flags, filter->layer, &predictions, &predictionsLength, &predictionsLabels, &predictionsLabelsLength,meta->x,meta->y,meta->width,meta->height);
 	  } else {

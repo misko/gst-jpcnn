@@ -142,7 +142,7 @@ gst_jpcnn_class_init (GstjpcnnClass * klass)
           FALSE, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_RANDOM,
       g_param_spec_boolean ("random", "random", "RANDOM SAMPLE",
-          TRUE, G_PARAM_READWRITE));
+          FALSE, G_PARAM_READWRITE));
 
   gst_element_class_set_details_simple(gstelement_class,
     "jpcnn",
